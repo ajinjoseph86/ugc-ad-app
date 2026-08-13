@@ -198,7 +198,8 @@ function buildPrompt({
   if (characterMode === 'upload') {
     const { label } = describeRefs(characterImageCount);
     notes.push(
-      `${label} the exact character/person to feature in the video — preserve their identity, face, and appearance exactly.`
+      `${label} the exact character/person to feature — preserve their identity, face, skin, hair, and ` +
+      'appearance exactly. Use this reference for identity only, not for the location, pose, framing, or scene setup.'
     );
   } else {
     notes.push(`Character: ${characterDescription}.`);
@@ -207,17 +208,30 @@ function buildPrompt({
   if (productMode === 'upload') {
     const { label } = describeRefs(productImageCount);
     notes.push(
-      `${label} the exact product to feature — preserve its exact appearance, colors, shape, and branding.`
+      `${label} the exact product to feature — preserve its exact shape, colour, packaging, label/branding, ` +
+      'texture, material, size, proportions, logo, and visible text exactly as shown. Show the product exactly ' +
+      'as it appears in the reference — closed/sealed/as-packaged — and do NOT show it being opened, unboxed, ' +
+      'or unwrapped unless the scene description below explicitly describes that action.'
     );
   } else {
     notes.push(`Product: ${productDescription}.`);
   }
 
-  return (
-    `${notes.join(' ')} ${prompt} ` +
-    'Style: authentic UGC (user-generated content) ad — natural handheld or selfie-style framing, ' +
-    'casual authentic delivery, good lighting, social-media ready.'
-  );
+  const styleGuide =
+    'Style: hyper-realistic UGC (user-generated content) product ad, filmed as if a real creator casually shot it ' +
+    'on their phone — not a polished commercial, studio shoot, or stock video. Vertical/social-media framing, ' +
+    'handheld camera movement, natural imperfect composition, believable everyday location, natural daylight or ' +
+    'realistic indoor lighting, no studio lighting or cinematic commercial polish. ' +
+    'Natural skin texture with visible pores and small imperfections, no airbrushing, no plastic-smooth or ' +
+    'model-like skin, realistic hand movement and product interaction, no floating product shots, no warped ' +
+    'labels or distorted packaging. ' +
+    'If the scene calls for the character to speak, render it as natural, clearly lip-synced on-camera dialogue — ' +
+    'casual and human, not a scripted influencer read, and not off-screen voiceover narration. ' +
+    'Sound design: ambient room tone and product-specific sound effects only — no background music, no on-screen text. ' +
+    'Avoid generic influencer clichés ("game changer", "obsessed", "this changed my life") and avoid exaggerated or ' +
+    'unrealistic product claims/transformations.';
+
+  return `${notes.join(' ')} ${prompt} ${styleGuide}`;
 }
 
 // ---------- routes ----------
@@ -329,7 +343,8 @@ app.post(
 
       const input = {
         prompt: finalPrompt,
-        generate_audio: false,
+        // Dialogue is a core part of the Scene/Script/Dialogue field — audio must be on for it to be heard/lip-synced.
+        generate_audio: true,
         resolution: RESOLUTION,
         aspect_ratio: aspectRatio,
         duration,
