@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>UGC Ad Creator</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">&#9679;</span>
+        <div>
+          <h1>UGC Ad Creator</h1>
+          <p>Turn a character and a product into a short UGC-style ad video.</p>
+        </div>
+      </div>
+      <div class="budget" id="budget-pill" title="daily budget">
+        <span class="dot"></span>
+        <span id="budget-text">Loading budget…</span>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="panel controls">
+        <div class="field-group">
+          <h2>Character</h2>
+          <p class="hint">Upload a photo of the person/character, or describe them instead.</p>
+          <div class="mode-tabs" data-target="character">
+            <button type="button" class="mode-tab active" data-mode="upload">Upload photo</button>
+            <button type="button" class="mode-tab" data-mode="describe">Describe</button>
+          </div>
+          <div class="mode-panel" data-panel="character" data-mode="upload">
+            <div class="photo-slots" id="character-slot-wrap">
+              <label class="photo-slot" data-index="0">
+                <input type="file" accept="image/*" class="photo-input" id="character-photo-0" />
+                <span class="plus">+</span>
+              </label>
+              <label class="photo-slot" data-index="1">
+                <input type="file" accept="image/*" class="photo-input" id="character-photo-1" />
+                <span class="plus">+</span>
+              </label>
+              <label class="photo-slot" data-index="2">
+                <input type="file" accept="image/*" class="photo-input" id="character-photo-2" />
+                <span class="plus">+</span>
+              </label>
+              <label class="photo-slot" data-index="3">
+                <input type="file" accept="image/*" class="photo-input" id="character-photo-3" />
+                <span class="plus">+</span>
+              </label>
+              <label class="photo-slot" data-index="4">
+                <input type="file" accept="image/*" class="photo-input" id="character-photo-4" />
+                <span class="plus">+</span>
+              </label>
+            </div>
+          </div>
+          <div class="mode-panel hidden" data-panel="character" data-mode="describe">
+            <textarea id="character-description" class="text-input" rows="2" placeholder="e.g. a cheerful woman in her mid-20s, wavy brown hair, casual streetwear"></textarea>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <h2>Product</h2>
+          <p class="hint">Upload a product photo, or describe it instead.</p>
+          <div class="mode-tabs" data-target="product">
+            <button type="button" class="mode-tab active" data-mode="upload">Upload photo</button>
+            <button type="button" class="mode-tab" data-mode="describe">Describe</button>
+          </div>
+          <div class="mode-panel" data-panel="product" data-mode="upload">
+            <div class="photo-slots" id="product-slot-wrap">
+              <label class="photo-slot" data-index="0">
+                <input type="file" accept="image/*" class="photo-input" id="product-photo-0" />
+                <span class="plus">+</span>
+              </label>
+              <label class="photo-slot" data-index="1">
+                <input type="file" accept="image/*" class="photo-input" id="product-photo-1" />
+                <span class="plus">+</span>
+              </label>
+              <label class="photo-slot" data-index="2">
+                <input type="file" accept="image/*" class="photo-input" id="product-photo-2" />
+                <span class="plus">+</span>
+              </label>
+              <label class="photo-slot" data-index="3">
+                <input type="file" accept="image/*" class="photo-input" id="product-photo-3" />
+                <span class="plus">+</span>
+              </label>
+              <label class="photo-slot" data-index="4">
+                <input type="file" accept="image/*" class="photo-input" id="product-photo-4" />
+                <span class="plus">+</span>
+              </label>
+            </div>
+          </div>
+          <div class="mode-panel hidden" data-panel="product" data-mode="describe">
+            <textarea id="product-description" class="text-input" rows="2" placeholder="e.g. a matte black reusable water bottle with a bamboo lid"></textarea>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <h2>Scene / Script / Dialogue</h2>
+          <p class="hint">Describe the action &mdash; what the character does with the product, setting, mood.</p>
+          <p class="hint">Describe the action and dialogue and adjust the length based on dialogue &mdash; Keep it simple.</p>
+          <textarea id="prompt" class="text-input" rows="3" placeholder="e.g. She unboxes the bottle at her kitchen counter, smiles, and says &quot;This is my new favorite&quot; while taking a sip, natural daylight"></textarea>
+        </div>
+
+        <div class="field-group">
+          <h2>Aspect ratio</h2>
+          <select id="aspect-ratio" class="text-input">
+            <option value="9:16" selected>9:16 &mdash; Reels / TikTok / Shorts</option>
+            <option value="16:9">16:9 &mdash; Landscape / YouTube</option>
+            <option value="1:1">1:1 &mdash; Square</option>
+            <option value="4:3">4:3</option>
+            <option value="3:4">3:4</option>
+            <option value="21:9">21:9 &mdash; Cinematic</option>
+          </select>
+        </div>
+
+        <div class="field-group">
+          <h2>Duration</h2>
+          <input type="range" id="duration" class="slider" min="4" max="15" step="1" value="5" />
+          <div class="row-between">
+            <span class="hint" id="duration-readout">5 seconds</span>
+            <span class="hint">4&ndash;15 sec</span>
+          </div>
+        </div>
+
+        <button id="generate-btn" class="generate-btn">
+          <span id="generate-btn-text">Generate Ad Video</span>
+          <span class="cost-badge" id="cost-badge">~$0.39</span>
+        </button>
+        <p class="error-text" id="error-text"></p>
+      </section>
+
+      <section class="panel preview">
+        <div class="row-between">
+          <h2>Preview</h2>
+          <span class="hint">Takes approx 1&ndash;3 mins</span>
+          <a id="download-btn" class="download-btn hidden" download>&#8681; Download</a>
+        </div>
+        <div class="preview-frame" id="preview-frame">
+          <div class="preview-placeholder" id="preview-placeholder">
+            <span class="preview-icon">&#127909;</span>
+            <p>Your ad video will appear here</p>
+          </div>
+          <video id="preview-video" class="preview-video hidden" controls loop playsinline></video>
+          <div class="preview-loading hidden" id="preview-loading">
+            <div class="spinner"></div>
+            <p>Generating your ad…</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <section class="gallery-section">
+      <div class="row-between">
+        <h2>Your ads</h2>
+      </div>
+      <div class="gallery" id="gallery"></div>
+    </section>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
