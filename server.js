@@ -60,7 +60,8 @@ app.use('/uploads', express.static(UPLOADS_DIR));
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 15 * 1024 * 1024, files: 2 },
+  // Up to 5 character + 5 product reference photos.
+  limits: { fileSize: 15 * 1024 * 1024, files: 10 },
 });
 
 // ---------- date / budget helpers (Asia/Singapore) ----------
@@ -252,6 +253,53 @@ app.get('/api/history', async (req, res) => {
   res.json(history.filter((entry) => entry.clientId === req.clientId));
 });
 
+app.get('/api/status/:id', async (req, res) => {
+  const history = await readJson(HISTORY_FILE, []);
+  const entry = history.find((h) => h.id === req.params.id && h.clientId === req.clientId);
+  if (!entry) {
+    return res.status(404).json({ error: 'Generation not found.' });
+  }
+  res.json(entry);
+});
+
+async function updateHistoryEntry(id, patch) {
+  const history = await readJson(HISTORY_FILE, []);
+  const entry = history.find((h) => h.id === id);
+  if (!entry) return;
+  Object.assign(entry, patch);
+  await writeJson(HISTORY_FILE, history);
+}
+
+// Runs after the HTTP response has already been sent — kie.ai's Seedance Fast averages
+// ~4 minutes, far longer than Render's reverse-proxy request timeout would allow.
+async function processGeneration({ id, input, estimatedCost, tempUploadPaths }) {
+  try {
+    const taskId = await kieCreateTask(input);
+    const resultVideoUrl = await kiePollResult(taskId);
+
+    const destFile = `${id}.mp4`;
+    await downloadToFile(resultVideoUrl, path.join(GENERATED_DIR, destFile));
+    const newTotal = await addSpend(estimatedCost);
+
+    await updateHistoryEntry(id, {
+      status: 'success',
+      resultUrl: `/generated/${destFile}`,
+      spentTodayUsd: Number(newTotal.toFixed(4)),
+    });
+  } catch (err) {
+    console.error('generate error:', err);
+    await updateHistoryEntry(id, {
+      status: 'fail',
+      error: err.message || 'Ad video generation failed.',
+    });
+  } finally {
+    // Reference photos only need to exist long enough for kie.ai to fetch them.
+    for (const p of tempUploadPaths) {
+      fsp.unlink(p).catch(() => {});
+    }
+  }
+}
+
 app.post(
   '/api/generate',
   upload.fields([
@@ -353,15 +401,7 @@ app.post(
         input.reference_image_urls = referenceImageUrls;
       }
 
-      const taskId = await kieCreateTask(input);
-      const resultVideoUrl = await kiePollResult(taskId);
-
       const id = uuidv4();
-      const destFile = `${id}.mp4`;
-      await downloadToFile(resultVideoUrl, path.join(GENERATED_DIR, destFile));
-
-      const newTotal = await addSpend(estimatedCost);
-
       const entry = {
         id,
         clientId: req.clientId,
@@ -369,30 +409,33 @@ app.post(
         prompt,
         aspectRatio,
         duration,
-        resultUrl: `/generated/${destFile}`,
+        status: 'pending',
         costUsd: estimatedCost,
       };
       await appendHistory(entry);
 
-      res.json({
-        success: true,
-        id: entry.id,
-        resultUrl: entry.resultUrl,
-        costUsd: estimatedCost,
-        spentTodayUsd: Number(newTotal.toFixed(4)),
-        remainingTodayUsd: Number(Math.max(0, DAILY_BUDGET_USD - newTotal).toFixed(4)),
-      });
+      // Respond immediately — Seedance generation runs well past any reverse-proxy timeout.
+      res.json({ id, status: 'pending' });
+
+      processGeneration({ id, input, estimatedCost, tempUploadPaths });
     } catch (err) {
       console.error('generate error:', err);
-      res.status(500).json({ error: err.message || 'Ad video generation failed.' });
-    } finally {
-      // Reference photos only need to exist long enough for kie.ai to fetch them.
       for (const p of tempUploadPaths) {
         fsp.unlink(p).catch(() => {});
       }
+      res.status(500).json({ error: err.message || 'Ad video generation failed.' });
     }
   }
 );
+
+// multer errors (e.g. too many files) land here instead of Express's default HTML error page.
+app.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    return res.status(400).json({ error: err.message });
+  }
+  console.error('unhandled error:', err);
+  res.status(500).json({ error: 'Something went wrong.' });
+});
 
 app.listen(PORT, () => {
   console.log(`UGC Ad Creator app running at http://localhost:${PORT}`);

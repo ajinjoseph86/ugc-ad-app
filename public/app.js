@@ -140,11 +140,12 @@ async function refreshHistory() {
 
 function renderGallery(history) {
   els.gallery.innerHTML = '';
-  if (!history.length) {
+  const done = history.filter((entry) => entry.status === 'success');
+  if (!done.length) {
     els.gallery.innerHTML = '<p class="gallery-empty">No ads generated yet.</p>';
     return;
   }
-  history.forEach((entry) => {
+  done.forEach((entry) => {
     const item = document.createElement('div');
     item.className = 'gallery-item';
     item.innerHTML = `
@@ -231,13 +232,15 @@ els.generateBtn.addEventListener('click', async () => {
       throw new Error(data.error || 'Generation failed.');
     }
 
+    const entry = await pollForResult(data.id);
+
     els.previewPlaceholder.classList.add('hidden');
-    els.previewVideo.src = `${data.resultUrl}?t=${Date.now()}`;
+    els.previewVideo.src = `${entry.resultUrl}?t=${Date.now()}`;
     els.previewVideo.classList.remove('hidden');
     els.previewVideo.play().catch(() => {});
-    state.currentVideoId = data.id;
+    state.currentVideoId = entry.id;
     els.downloadBtn.classList.remove('hidden');
-    els.downloadBtn.href = data.resultUrl;
+    els.downloadBtn.href = entry.resultUrl;
 
     await refreshBudget();
     await refreshHistory();
@@ -250,6 +253,21 @@ els.generateBtn.addEventListener('click', async () => {
     setLoading(false);
   }
 });
+
+async function pollForResult(id, { intervalMs = 4000, timeoutMs = 9 * 60 * 1000 } = {}) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const res = await fetch(`/api/status/${id}`);
+    const entry = await res.json();
+    if (!res.ok) {
+      throw new Error(entry.error || 'Could not check generation status.');
+    }
+    if (entry.status === 'success') return entry;
+    if (entry.status === 'fail') throw new Error(entry.error || 'Ad video generation failed.');
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+  throw new Error('Generation timed out.');
+}
 
 // ---------- init ----------
 
