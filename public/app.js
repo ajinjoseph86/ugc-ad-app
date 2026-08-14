@@ -254,7 +254,7 @@ els.generateBtn.addEventListener('click', async () => {
   }
 });
 
-async function pollForResult(id, { intervalMs = 4000, timeoutMs = 9 * 60 * 1000 } = {}) {
+async function pollForResult(id, { intervalMs = 4000, timeoutMs = 16 * 60 * 1000 } = {}) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
     const res = await fetch(`/api/status/${id}`);

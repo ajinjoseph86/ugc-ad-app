@@ -138,7 +138,7 @@ async function kieCreateTask(input) {
   return body.data.taskId;
 }
 
-async function kiePollResult(taskId, { timeoutMs = 9 * 60 * 1000, intervalMs = 4000 } = {}) {
+async function kiePollResult(taskId, { timeoutMs = 15 * 60 * 1000, intervalMs = 4000 } = {}) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
     const res = await fetchWithRetry(`${KIE_API_BASE}/jobs/recordInfo?taskId=${encodeURIComponent(taskId)}`, {
