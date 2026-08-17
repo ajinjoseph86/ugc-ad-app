@@ -1,16 +1,16 @@
 const state = {
   characterMode: 'upload',
   productMode: 'upload',
-  characterPhotos: [null, null, null, null, null],
-  productPhotos: [null, null, null, null, null],
+  characterPhotos: [null, null, null],
+  productPhotos: [null, null, null],
   currentVideoId: null,
 };
 
 const els = {
-  characterPhotoInputs: [0, 1, 2, 3, 4].map((i) => document.getElementById(`character-photo-${i}`)),
+  characterPhotoInputs: [0, 1, 2].map((i) => document.getElementById(`character-photo-${i}`)),
   characterSlotWrap: document.getElementById('character-slot-wrap'),
   characterDescription: document.getElementById('character-description'),
-  productPhotoInputs: [0, 1, 2, 3, 4].map((i) => document.getElementById(`product-photo-${i}`)),
+  productPhotoInputs: [0, 1, 2].map((i) => document.getElementById(`product-photo-${i}`)),
   productSlotWrap: document.getElementById('product-slot-wrap'),
   productDescription: document.getElementById('product-description'),
   prompt: document.getElementById('prompt'),

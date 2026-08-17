@@ -303,8 +303,8 @@ async function processGeneration({ id, input, estimatedCost, tempUploadPaths }) 
 app.post(
   '/api/generate',
   upload.fields([
-    { name: 'characterPhoto', maxCount: 5 },
-    { name: 'productPhoto', maxCount: 5 },
+    { name: 'characterPhoto', maxCount: 3 },
+    { name: 'productPhoto', maxCount: 3 },
   ]),
   async (req, res) => {
     const tempUploadPaths = [];
@@ -329,9 +329,8 @@ app.post(
         return res.status(400).json({ error: 'Describe the scene/script for the ad.' });
       }
 
-      // kie.ai allows at most 9 combined reference images per task.
-      const characterFiles = (req.files?.characterPhoto || []).slice(0, 5);
-      const productFiles = (req.files?.productPhoto || []).slice(0, 9 - characterFiles.length);
+      const characterFiles = (req.files?.characterPhoto || []).slice(0, 3);
+      const productFiles = (req.files?.productPhoto || []).slice(0, 3);
 
       if (characterMode === 'upload' && !characterFiles.length) {
         return res.status(400).json({ error: 'Upload a character photo, or switch to Describe.' });
