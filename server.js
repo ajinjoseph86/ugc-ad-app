@@ -319,7 +319,7 @@ app.post(
       const productDescription = (req.body.productDescription || '').trim();
       const prompt = (req.body.prompt || '').trim();
       const aspectRatio = req.body.aspectRatio || '9:16';
-      const duration = Math.min(15, Math.max(4, parseInt(req.body.duration, 10) || 5));
+      const duration = Math.min(30, Math.max(4, parseInt(req.body.duration, 10) || 5));
 
       const validAspectRatios = ['1:1', '4:3', '3:4', '16:9', '9:16', '21:9'];
       if (!validAspectRatios.includes(aspectRatio)) {
