@@ -13,11 +13,11 @@ const PORT = process.env.PORT || 3000;
 const KIE_API_KEY = process.env.KIE_API_KEY;
 const DAILY_BUDGET_USD = parseFloat(process.env.DAILY_BUDGET_USD || '10.00');
 
-// bytedance/seedance-2-fast, 480p, no reference-video input ("no video" rate).
+// bytedance/seedance-2-5, 480p, no reference-video input ("no video" rate).
 // Reference IMAGES do not change the pricing tier — only reference VIDEOS do.
-const KIE_MODEL = 'bytedance/seedance-2-fast';
+const KIE_MODEL = 'bytedance/seedance-2-5';
 const RESOLUTION = '480p';
-const COST_PER_SECOND_USD = 0.0775;
+const COST_PER_SECOND_USD = 0.140;
 const KIE_API_BASE = 'https://api.kie.ai/api/v1';
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');

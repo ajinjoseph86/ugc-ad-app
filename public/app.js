@@ -98,8 +98,8 @@ els.productPhotoInputs.forEach((input, index) => {
 
 // ---------- duration readout ----------
 
-// kie.ai Seedance 2 Fast, 480p, image-reference (no video input) rate.
-const COST_PER_SECOND_USD = 0.0775;
+// kie.ai Seedance 2.5, 480p, image-reference (no video input) rate.
+const COST_PER_SECOND_USD = 0.140;
 
 function updateCostBadge() {
   const cost = Number(els.duration.value) * COST_PER_SECOND_USD;
