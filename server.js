@@ -108,12 +108,20 @@ async function appendHistory(entry) {
 
 // ---------- kie.ai helpers ----------
 
-// A handful of network hiccups (TLS blips, DNS timeouts) shouldn't kill an otherwise-good generation.
-async function fetchWithRetry(url, options, { retries = 3, delayMs = 1500 } = {}) {
+// kie.ai's own infra returns transient 5xx/429s under load, on top of the usual network
+// hiccups (TLS blips, DNS timeouts) — neither should kill an otherwise-good generation.
+const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
+
+async function fetchWithRetry(url, options, { retries = 4, delayMs = 1500 } = {}) {
   let lastErr;
   for (let attempt = 0; attempt <= retries; attempt += 1) {
     try {
-      return await fetch(url, options);
+      const res = await fetch(url, options);
+      if (RETRYABLE_STATUS_CODES.has(res.status) && attempt < retries) {
+        await new Promise((r) => setTimeout(r, delayMs));
+        continue;
+      }
+      return res;
     } catch (err) {
       lastErr = err;
       if (attempt < retries) {
