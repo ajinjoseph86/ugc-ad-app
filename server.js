@@ -18,7 +18,9 @@ const DAILY_BUDGET_USD = parseFloat(process.env.DAILY_BUDGET_USD || '10.00');
 const KIE_MODEL = 'bytedance/seedance-2-5';
 const RESOLUTION = '480p';
 const COST_PER_SECOND_USD = 0.140;
-const KIE_API_BASE = 'https://api.kie.ai/api/v1';
+const KIE_ROOT = 'https://api.kie.ai';
+const KIE_API_BASE = `${KIE_ROOT}/api/v1`;
+const LLM_MODEL = 'claude-sonnet-5';
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const SPEND_FILE = path.join(DATA_DIR, 'spend.json');
@@ -171,6 +173,51 @@ async function downloadToFile(url, destPath) {
   await fsp.writeFile(destPath, buf);
 }
 
+// ---------- LLM prompt expansion ----------
+
+const LLM_DIRECTOR_INSTRUCTIONS =
+  'You are an expert UGC ad director, TikTok scriptwriter, and Seedance video prompt engineer. ' +
+  "Given a short scene idea, expand it into one vivid, detailed scene description for a realistic UGC-style " +
+  'product ad, matched to the given duration. Describe the specific action beat-by-beat, natural camera ' +
+  'movement (handheld, push-ins, whip pans as fitting), body language, and — if the idea implies the character ' +
+  'speaks — write out natural, casual, human dialogue lines (not a scripted influencer read) timed to fit the ' +
+  'duration. Keep it hyper-realistic phone-shot UGC style, not a polished commercial. ' +
+  'Output ONLY the expanded scene description text — no headings, no explanations, no markdown, no options.';
+
+async function expandPromptWithLLM({ characterMode, characterDescription, productMode, productDescription, scenePrompt, duration, aspectRatio }) {
+  const userMessage =
+    `${LLM_DIRECTOR_INSTRUCTIONS}\n\n` +
+    `Character: ${characterMode === 'describe' ? characterDescription : '(shown in a reference photo — do not invent a different appearance)'}\n` +
+    `Product: ${productMode === 'describe' ? productDescription : '(shown in a reference photo — do not invent a different appearance)'}\n` +
+    `Scene idea from user: "${scenePrompt}"\n` +
+    `Video duration: ${duration} seconds\n` +
+    `Aspect ratio: ${aspectRatio}\n\n` +
+    'Expand this into the final scene description now.';
+
+  const res = await fetchWithRetry(`${KIE_ROOT}/claude/v1/messages`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${KIE_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: LLM_MODEL,
+      messages: [{ role: 'user', content: userMessage }],
+      stream: false,
+      max_tokens: 700,
+    }),
+  });
+  const body = await res.json();
+  if (!res.ok) {
+    throw new Error(body?.error?.message || body?.msg || `kie.ai LLM call failed (${res.status})`);
+  }
+  const textBlock = (body.content || []).find((b) => b.type === 'text' && b.text);
+  if (!textBlock) {
+    throw new Error('LLM prompt expansion returned no text.');
+  }
+  return textBlock.text.trim();
+}
+
 // ---------- prompt building ----------
 
 function buildPrompt({
@@ -270,10 +317,62 @@ async function updateHistoryEntry(id, patch) {
   await writeJson(HISTORY_FILE, history);
 }
 
-// Runs after the HTTP response has already been sent — kie.ai's Seedance Fast averages
-// ~4 minutes, far longer than Render's reverse-proxy request timeout would allow.
-async function processGeneration({ id, input, estimatedCost, tempUploadPaths }) {
+// Runs after the HTTP response has already been sent — kie.ai's Seedance generation averages
+// several minutes, far longer than Render's reverse-proxy request timeout would allow.
+async function processGeneration({
+  id,
+  scenePrompt,
+  characterMode,
+  characterDescription,
+  productMode,
+  productDescription,
+  characterImageCount,
+  productImageCount,
+  referenceImageUrls,
+  aspectRatio,
+  duration,
+  estimatedCost,
+  tempUploadPaths,
+}) {
   try {
+    let expandedScene = scenePrompt;
+    try {
+      expandedScene = await expandPromptWithLLM({
+        characterMode,
+        characterDescription,
+        productMode,
+        productDescription,
+        scenePrompt,
+        duration,
+        aspectRatio,
+      });
+    } catch (err) {
+      // Prompt expansion is an enhancement, not a requirement — fall back to the raw scene text.
+      console.error('prompt expansion failed, using raw prompt:', err.message);
+    }
+
+    const finalPrompt = buildPrompt({
+      prompt: expandedScene,
+      characterMode,
+      characterDescription,
+      productMode,
+      productDescription,
+      characterImageCount,
+      productImageCount,
+    });
+
+    const input = {
+      prompt: finalPrompt,
+      // Dialogue is a core part of the Scene/Script/Dialogue field — audio must be on for it to be heard/lip-synced.
+      generate_audio: true,
+      resolution: RESOLUTION,
+      aspect_ratio: aspectRatio,
+      duration,
+    };
+    if (referenceImageUrls.length) {
+      input.reference_image_urls = referenceImageUrls;
+    }
+
     const taskId = await kieCreateTask(input);
     const resultVideoUrl = await kiePollResult(taskId);
 
@@ -285,6 +384,7 @@ async function processGeneration({ id, input, estimatedCost, tempUploadPaths }) 
       status: 'success',
       resultUrl: `/generated/${destFile}`,
       spentTodayUsd: Number(newTotal.toFixed(4)),
+      expandedPrompt: expandedScene,
     });
   } catch (err) {
     console.error('generate error:', err);
@@ -378,28 +478,6 @@ app.post(
         referenceImageUrls.push(await stageUpload(productFile));
       }
 
-      const finalPrompt = buildPrompt({
-        prompt,
-        characterMode,
-        characterDescription,
-        productMode,
-        productDescription,
-        characterImageCount: characterFiles.length,
-        productImageCount: productFiles.length,
-      });
-
-      const input = {
-        prompt: finalPrompt,
-        // Dialogue is a core part of the Scene/Script/Dialogue field — audio must be on for it to be heard/lip-synced.
-        generate_audio: true,
-        resolution: RESOLUTION,
-        aspect_ratio: aspectRatio,
-        duration,
-      };
-      if (referenceImageUrls.length) {
-        input.reference_image_urls = referenceImageUrls;
-      }
-
       const id = uuidv4();
       const entry = {
         id,
@@ -413,10 +491,25 @@ app.post(
       };
       await appendHistory(entry);
 
-      // Respond immediately — Seedance generation runs well past any reverse-proxy timeout.
+      // Respond immediately — Seedance generation (plus prompt expansion) runs well past any
+      // reverse-proxy timeout, so both happen in the background after this response is sent.
       res.json({ id, status: 'pending' });
 
-      processGeneration({ id, input, estimatedCost, tempUploadPaths });
+      processGeneration({
+        id,
+        scenePrompt: prompt,
+        characterMode,
+        characterDescription,
+        productMode,
+        productDescription,
+        characterImageCount: characterFiles.length,
+        productImageCount: productFiles.length,
+        referenceImageUrls,
+        aspectRatio,
+        duration,
+        estimatedCost,
+        tempUploadPaths,
+      });
     } catch (err) {
       console.error('generate error:', err);
       for (const p of tempUploadPaths) {
