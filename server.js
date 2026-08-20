@@ -175,24 +175,63 @@ async function downloadToFile(url, destPath) {
 
 // ---------- LLM prompt expansion ----------
 
-const LLM_DIRECTOR_INSTRUCTIONS =
-  'You are an expert UGC ad director, TikTok scriptwriter, and Seedance video prompt engineer. ' +
-  "Given a short scene idea, expand it into one vivid, detailed scene description for a realistic UGC-style " +
-  'product ad, matched to the given duration. Describe the specific action beat-by-beat, natural camera ' +
-  'movement (handheld, push-ins, whip pans as fitting), body language, and — if the idea implies the character ' +
-  'speaks — write out natural, casual, human dialogue lines (not a scripted influencer read) timed to fit the ' +
-  'duration. Keep it hyper-realistic phone-shot UGC style, not a polished commercial. ' +
-  'Output ONLY the expanded scene description text — no headings, no explanations, no markdown, no options.';
+const LLM_DIRECTOR_INSTRUCTIONS = `You are an expert cinematic UGC ad director, prompt engineer, and screenwriter for the Seedance video model. Given a character, a product, a short scene idea, and a target duration, write ONE complete, fully engineered Seedance prompt using the exact structure below. Output ONLY the finished prompt text — no headings like "Prompt:", no explanations, no markdown formatting, no commentary, no multiple options.
 
-async function expandPromptWithLLM({ characterMode, characterDescription, productMode, productDescription, scenePrompt, duration, aspectRatio }) {
+STRUCTURE TO FOLLOW, IN ORDER:
+
+1. REFERENCE IMAGE LOCKS — for each role that has uploaded reference image(s), you will be told exactly which @image numbers belong to it. Write a block like:
+"@image1 @image2 — THE CHARACTER. Take their face, hair, skin tone, build and physical appearance ENTIRELY from the uploaded reference image(s). Reproduce them exactly as they appear there. Do not alter, stylise or reinterpret any part of their appearance at any point in the clip."
+"@image3 — THE PRODUCT. Take its exact shape, colour, packaging, label/branding, texture, material, size and proportions ENTIRELY from the uploaded reference image(s). Reproduce it exactly. No substitutions, no redesigns, no alternate colourways."
+Use the EXACT @image numbers given to you for each role — never invent or guess numbers. If a role has no uploaded photo, skip the @image tag for it and instead write a short, vivid description of it from what was provided, with the same "do not alter" lock language.
+
+2. CONSISTENCY LOCK — one short paragraph stating the character's appearance/clothing and the product's appearance must remain identical in every frame, and the environment/setting must not change at any point in the clip.
+
+3. SCENE SETTING — one vivid paragraph establishing a specific, believable everyday location, lighting, and mood. Hyper-realistic UGC phone-shot aesthetic — not a studio commercial, not stock footage.
+
+4. TIMESTAMPED BEAT-BY-BEAT BREAKDOWN — break the FULL given duration into short timestamped segments (roughly 2-4 seconds each, covering start to finish with no gaps, e.g. "0:00–0:03 — ..."). For each beat describe: what happens visually, camera framing/movement (handheld, push-in, whip pan, etc as fits), physical action and body language, and any dialogue spoken in that beat. The beats must add up to exactly the given duration — do not pad or run short.
+
+5. AUDIO — state "GENERATE NATIVE AUDIO WITH THE VIDEO." then, only if the scene idea implies speech, list every spoken line with its exact timestamp and speaker, instructing accurate lip-sync, e.g. "0:04 — SHE says, warmly: '...'". Keep lines natural, casual, human — never a scripted influencer read, never generic clichés like "game changer" or "obsessed" unless they genuinely fit. Then describe the sound design: ambient/diegetic sounds specific to this scene and to the product interaction only. Explicitly state: NO MUSIC SCORE AT ANY POINT, no off-screen voiceover narration, no on-screen text.
+
+6. CAMERA PACKAGE — one short paragraph: shot in a natural handheld phone-camera style (unless the scene idea clearly calls for something more cinematic), realistic lens distortion, natural frame rate/motion, no artificial cinematic gloss or commercial polish.
+
+7. PHOTOREAL — one short paragraph: real skin texture with visible pores and small imperfections, no airbrushing, no plastic-smooth or model-like skin, natural fabric and hair movement, authentic physics, natural motion blur, live-action photographic realism — not rendered, not stylised, no CGI look, no watermark or logo bugs.
+
+HARD RULES:
+- Never show the product being opened, unboxed, or unwrapped unless the user's scene idea explicitly implies that action — if it does, describe the opening explicitly in the beat where it happens.
+- Never invent unrealistic product claims, medical/financial claims, or exaggerated transformations.
+- Keep the whole prompt tightly scoped to the given duration.`;
+
+async function expandPromptWithLLM({
+  characterMode,
+  characterDescription,
+  productMode,
+  productDescription,
+  characterImageCount,
+  productImageCount,
+  scenePrompt,
+  duration,
+  aspectRatio,
+}) {
+  let nextImageIndex = 1;
+  let characterImageNote = '(description only, no reference photo)';
+  if (characterMode === 'upload') {
+    const indices = Array.from({ length: characterImageCount }, () => nextImageIndex++);
+    characterImageNote = `has reference photo(s) @image${indices.join(' @image')}`;
+  }
+  let productImageNote = '(description only, no reference photo)';
+  if (productMode === 'upload') {
+    const indices = Array.from({ length: productImageCount }, () => nextImageIndex++);
+    productImageNote = `has reference photo(s) @image${indices.join(' @image')}`;
+  }
+
   const userMessage =
     `${LLM_DIRECTOR_INSTRUCTIONS}\n\n` +
-    `Character: ${characterMode === 'describe' ? characterDescription : '(shown in a reference photo — do not invent a different appearance)'}\n` +
-    `Product: ${productMode === 'describe' ? productDescription : '(shown in a reference photo — do not invent a different appearance)'}\n` +
+    `Character: ${characterMode === 'describe' ? characterDescription : characterImageNote}\n` +
+    `Product: ${productMode === 'describe' ? productDescription : productImageNote}\n` +
     `Scene idea from user: "${scenePrompt}"\n` +
-    `Video duration: ${duration} seconds\n` +
+    `Video duration: ${duration} seconds (exactly)\n` +
     `Aspect ratio: ${aspectRatio}\n\n` +
-    'Expand this into the final scene description now.';
+    'Write the final Seedance prompt now, following the structure exactly.';
 
   const res = await fetchWithRetry(`${KIE_ROOT}/claude/v1/messages`, {
     method: 'POST',
@@ -204,7 +243,7 @@ async function expandPromptWithLLM({ characterMode, characterDescription, produc
       model: LLM_MODEL,
       messages: [{ role: 'user', content: userMessage }],
       stream: false,
-      max_tokens: 700,
+      max_tokens: 3000,
     }),
   });
   const body = await res.json();
@@ -335,31 +374,32 @@ async function processGeneration({
   tempUploadPaths,
 }) {
   try {
-    let expandedScene = scenePrompt;
+    let finalPrompt;
     try {
-      expandedScene = await expandPromptWithLLM({
+      finalPrompt = await expandPromptWithLLM({
         characterMode,
         characterDescription,
         productMode,
         productDescription,
+        characterImageCount,
+        productImageCount,
         scenePrompt,
         duration,
         aspectRatio,
       });
     } catch (err) {
-      // Prompt expansion is an enhancement, not a requirement — fall back to the raw scene text.
-      console.error('prompt expansion failed, using raw prompt:', err.message);
+      // Prompt expansion is an enhancement, not a requirement — fall back to the static wrapper.
+      console.error('prompt expansion failed, using fallback prompt:', err.message);
+      finalPrompt = buildPrompt({
+        prompt: scenePrompt,
+        characterMode,
+        characterDescription,
+        productMode,
+        productDescription,
+        characterImageCount,
+        productImageCount,
+      });
     }
-
-    const finalPrompt = buildPrompt({
-      prompt: expandedScene,
-      characterMode,
-      characterDescription,
-      productMode,
-      productDescription,
-      characterImageCount,
-      productImageCount,
-    });
 
     const input = {
       prompt: finalPrompt,
@@ -384,7 +424,7 @@ async function processGeneration({
       status: 'success',
       resultUrl: `/generated/${destFile}`,
       spentTodayUsd: Number(newTotal.toFixed(4)),
-      expandedPrompt: expandedScene,
+      expandedPrompt: finalPrompt,
     });
   } catch (err) {
     console.error('generate error:', err);
