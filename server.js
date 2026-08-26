@@ -394,6 +394,8 @@ async function processGeneration({
   tempUploadPaths,
 }) {
   try {
+    await updateHistoryEntry(id, { stage: 'writing prompt' });
+
     let finalPrompt;
     try {
       finalPrompt = await expandPromptWithLLM({
@@ -433,6 +435,8 @@ async function processGeneration({
       input.reference_image_urls = referenceImageUrls;
     }
 
+    await updateHistoryEntry(id, { stage: 'generating video' });
+
     const taskId = await kieCreateTask(input);
     const resultVideoUrl = await kiePollResult(taskId);
 
@@ -442,6 +446,7 @@ async function processGeneration({
 
     await updateHistoryEntry(id, {
       status: 'success',
+      stage: 'done',
       resultUrl: `/generated/${destFile}`,
       spentTodayUsd: Number(newTotal.toFixed(4)),
       expandedPrompt: finalPrompt,
@@ -450,6 +455,7 @@ async function processGeneration({
     console.error('generate error:', err);
     await updateHistoryEntry(id, {
       status: 'fail',
+      stage: 'failed',
       error: err.message || 'Ad video generation failed.',
     });
   } finally {
@@ -547,6 +553,7 @@ app.post(
         aspectRatio,
         duration,
         status: 'pending',
+        stage: 'starting',
         costUsd: estimatedCost,
       };
       await appendHistory(entry);

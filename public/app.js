@@ -24,6 +24,8 @@ const els = {
   previewPlaceholder: document.getElementById('preview-placeholder'),
   previewVideo: document.getElementById('preview-video'),
   previewLoading: document.getElementById('preview-loading'),
+  progressText: document.getElementById('progress-text'),
+  progressBarFill: document.getElementById('progress-bar-fill'),
   downloadBtn: document.getElementById('download-btn'),
   gallery: document.getElementById('gallery'),
   budgetPill: document.getElementById('budget-pill'),
@@ -184,6 +186,21 @@ function setLoading(isLoading) {
   els.previewLoading.classList.toggle('hidden', !isLoading);
   if (isLoading) {
     showError('');
+    els.progressText.textContent = 'Starting…';
+    els.progressBarFill.style.width = '0%';
+  }
+}
+
+function updateProgress(entry) {
+  if (entry.stage === 'writing prompt') {
+    els.progressText.textContent = 'Writing the prompt…';
+    els.progressBarFill.style.width = '15%';
+  } else if (entry.stage === 'generating video') {
+    els.progressText.textContent = 'Generating your ad…';
+    els.progressBarFill.style.width = '55%';
+  } else {
+    els.progressText.textContent = 'Starting…';
+    els.progressBarFill.style.width = '3%';
   }
 }
 
@@ -262,6 +279,7 @@ async function pollForResult(id, { intervalMs = 4000, timeoutMs = 16 * 60 * 1000
     if (!res.ok) {
       throw new Error(entry.error || 'Could not check generation status.');
     }
+    updateProgress(entry);
     if (entry.status === 'success') return entry;
     if (entry.status === 'fail') throw new Error(entry.error || 'Ad video generation failed.');
     await new Promise((r) => setTimeout(r, intervalMs));

@@ -131,7 +131,10 @@
           <video id="preview-video" class="preview-video hidden" controls loop playsinline></video>
           <div class="preview-loading hidden" id="preview-loading">
             <div class="spinner"></div>
-            <p>Generating your ad…</p>
+            <p id="progress-text">Starting…</p>
+            <div class="progress-bar-track">
+              <div class="progress-bar-fill" id="progress-bar-fill"></div>
+            </div>
           </div>
         </div>
       </section>
