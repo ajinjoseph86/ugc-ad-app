@@ -8,6 +8,8 @@ const { v4: uuidv4 } = require('uuid');
 const fs = require('fs');
 const fsp = fs.promises;
 
+const { applyAuth } = require('./auth');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 const KIE_API_KEY = process.env.KIE_API_KEY;
@@ -33,6 +35,8 @@ for (const dir of [DATA_DIR, GENERATED_DIR, UPLOADS_DIR]) {
 }
 
 app.use(express.json());
+
+applyAuth(app, { password: process.env.APP_PASSWORD, secret: process.env.SESSION_SECRET });
 
 // ---------- per-visitor client id (so each browser only sees its own gallery) ----------
 
