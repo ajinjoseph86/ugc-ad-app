@@ -257,28 +257,45 @@ async function expandPromptWithLLM({
     `Aspect ratio: ${aspectRatio}\n\n` +
     'Write the final Seedance prompt now, following the structure exactly.';
 
-  const res = await fetchWithRetry(`${KIE_ROOT}/claude/v1/messages`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${KIE_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: LLM_MODEL,
-      messages: [{ role: 'user', content: userMessage }],
-      stream: false,
-      max_tokens: 3000,
-    }),
-  });
-  const body = await res.json();
-  if (!res.ok) {
-    throw new Error(body?.error?.message || body?.msg || `kie.ai LLM call failed (${res.status})`);
+  const maxAttempts = 3;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const res = await fetchWithRetry(`${KIE_ROOT}/claude/v1/messages`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${KIE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: LLM_MODEL,
+        messages: [{ role: 'user', content: userMessage }],
+        stream: false,
+        max_tokens: 3000,
+      }),
+    });
+
+    // kie.ai's proxy has occasionally returned a malformed/non-JSON body (a transient
+    // gateway glitch, not a code bug) — read as text and retry rather than crashing.
+    const raw = await res.text();
+    let body;
+    try {
+      body = JSON.parse(raw);
+    } catch (parseErr) {
+      if (attempt < maxAttempts - 1) {
+        await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+        continue;
+      }
+      throw new Error('kie.ai LLM call returned a malformed response after retries. Please try again.');
+    }
+
+    if (!res.ok) {
+      throw new Error(body?.error?.message || body?.msg || `kie.ai LLM call failed (${res.status})`);
+    }
+    const textBlock = (body.content || []).find((b) => b.type === 'text' && b.text);
+    if (!textBlock) {
+      throw new Error('LLM prompt expansion returned no text.');
+    }
+    return textBlock.text.trim();
   }
-  const textBlock = (body.content || []).find((b) => b.type === 'text' && b.text);
-  if (!textBlock) {
-    throw new Error('LLM prompt expansion returned no text.');
-  }
-  return textBlock.text.trim();
 }
 
 // ---------- prompt building ----------
