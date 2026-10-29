@@ -128,6 +128,60 @@ async function refreshBudget() {
   }
 }
 
+// ---------- prompt details ----------
+
+function escapeHtml(value) {
+  return String(value == null ? '' : value).replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
+
+const promptDetailsEl = document.getElementById('prompt-details');
+
+function renderPromptDetails(info) {
+  const meta = [
+    info.artStyle,
+    info.aspectRatio,
+    info.duration ? info.duration + 's' : '',
+    info.createdAt ? new Date(info.createdAt).toLocaleString() : '',
+  ].filter(Boolean).map(escapeHtml).join(' · ');
+  const finalBlock = info.finalPrompt
+    ? '<details><summary>Show the full written prompt</summary><pre>' + escapeHtml(info.finalPrompt) + '</pre>' +
+      '<button type="button" class="copy-btn" id="copy-final-prompt">Copy written prompt</button></details>'
+    : '';
+  promptDetailsEl.innerHTML =
+    '<h3>Prompt</h3><div class="prompt-meta">' + meta + '</div>' +
+    '<p class="prompt-text">' + escapeHtml(info.promptText || '') + '</p>' + finalBlock;
+  promptDetailsEl.classList.remove('hidden');
+  const copyBtn = document.getElementById('copy-final-prompt');
+  if (copyBtn) {
+    copyBtn.addEventListener('click', () => {
+      navigator.clipboard.writeText(info.finalPrompt).then(() => { copyBtn.textContent = 'Copied'; }).catch(() => {});
+    });
+  }
+}
+
+async function showPromptDetails(entry) {
+  if (!promptDetailsEl) return;
+  renderPromptDetails({
+    promptText: entry.promptText || entry.prompt,
+    finalPrompt: entry.finalPrompt || entry.expandedPrompt,
+    artStyle: entry.artStyle,
+    aspectRatio: entry.aspectRatio,
+    duration: entry.duration,
+    createdAt: entry.createdAt,
+  });
+  if (entry.finalPrompt || entry.expandedPrompt) return;
+  try {
+    const res = await fetch('/api/history/' + entry.id);
+    if (!res.ok) return;
+    const full = await res.json();
+    if (state.currentVideoId === entry.id) renderPromptDetails(full);
+  } catch (err) {
+    // non-fatal: the short prompt is already shown
+  }
+}
+
 // ---------- history / gallery ----------
 
 async function refreshHistory() {
@@ -150,8 +204,10 @@ function renderGallery(history) {
   done.forEach((entry) => {
     const item = document.createElement('div');
     item.className = 'gallery-item';
+    item.title = entry.promptText || '';
     item.innerHTML = `
       <video src="${entry.resultUrl}" muted loop playsinline></video>
+      <div class="gallery-caption">${escapeHtml(entry.promptText || '')}</div>
       <a class="gallery-download" href="${entry.resultUrl}" download title="Download">&#8681;</a>
     `;
     const video = item.querySelector('video');
@@ -172,6 +228,7 @@ function showResult(entry) {
   els.downloadBtn.classList.remove('hidden');
   els.downloadBtn.href = entry.resultUrl;
   state.currentVideoId = entry.id;
+  showPromptDetails(entry);
 }
 
 // ---------- generate ----------
@@ -256,6 +313,7 @@ els.generateBtn.addEventListener('click', async () => {
     els.previewVideo.classList.remove('hidden');
     els.previewVideo.play().catch(() => {});
     state.currentVideoId = entry.id;
+    showPromptDetails(entry);
     els.downloadBtn.classList.remove('hidden');
     els.downloadBtn.href = entry.resultUrl;
 
