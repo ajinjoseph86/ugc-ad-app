@@ -390,6 +390,7 @@ app.get('/api/history', async (req, res) => {
         duration: e.duration,
         aspectRatio: e.aspectRatio,
         promptText: e.prompt,
+        generationSeconds: e.generationSeconds,
       }))
   );
 });
@@ -408,6 +409,7 @@ app.get('/api/history/:id', async (req, res) => {
     promptText: e.prompt,
     finalPrompt: e.expandedPrompt,
     inputs: e.inputs,
+    generationSeconds: e.generationSeconds,
   });
 });
 
@@ -458,6 +460,7 @@ async function processGeneration({
   tempUploadPaths,
 }) {
   try {
+    const startedAt = Date.now();
     await updateHistoryEntry(id, { stage: 'writing prompt' });
 
     let finalPrompt;
@@ -515,6 +518,8 @@ async function processGeneration({
       resultUrl: `/generated/${destFile}`,
       spentTodayUsd: Number(newTotal.toFixed(4)),
       expandedPrompt: finalPrompt,
+      finishedAt: new Date().toISOString(),
+      generationSeconds: Math.round((Date.now() - startedAt) / 1000),
     });
   } catch (err) {
     console.error('generate error:', err);
@@ -694,6 +699,8 @@ async function recoverInterruptedJobs() {
           stage: 'done',
           resultUrl: '/generated/' + destFile,
           spentTodayUsd: Number(total.toFixed(4)),
+          finishedAt: new Date().toISOString(),
+          generationSeconds: Math.round((Date.now() - Date.parse(e.createdAt)) / 1000),
         });
       } catch (err) {
         await updateHistoryEntry(e.id, {
