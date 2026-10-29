@@ -138,6 +138,30 @@ function escapeHtml(value) {
 
 const promptDetailsEl = document.getElementById('prompt-details');
 
+function renderInputs(inputs) {
+  if (!inputs) return '';
+  const card = (label, thumbUrl, description) =>
+    '<div class="input-card">' +
+      (thumbUrl
+        ? '<img src="' + escapeHtml(thumbUrl) + '" alt="' + escapeHtml(label) + '" />'
+        : '<div class="input-desc">' + escapeHtml(description || '') + '</div>') +
+      '<span>' + escapeHtml(label) + (thumbUrl ? '' : ' (described)') + '</span>' +
+    '</div>';
+  const parts = [];
+  if ((inputs.characterThumbs || []).length) {
+    inputs.characterThumbs.forEach((u, i) => parts.push(card('Character ' + (i + 1), u)));
+  } else if (inputs.characterDescription) {
+    parts.push(card('Character', null, inputs.characterDescription));
+  }
+  if ((inputs.productThumbs || []).length) {
+    inputs.productThumbs.forEach((u, i) => parts.push(card('Product ' + (i + 1), u)));
+  } else if (inputs.productDescription) {
+    parts.push(card('Product', null, inputs.productDescription));
+  }
+  if (!parts.length) return '';
+  return '<h3>Used inputs</h3><div class="input-grid">' + parts.join('') + '</div>';
+}
+
 function renderPromptDetails(info) {
   const meta = [
     info.artStyle,
@@ -151,7 +175,7 @@ function renderPromptDetails(info) {
     : '';
   promptDetailsEl.innerHTML =
     '<h3>Prompt</h3><div class="prompt-meta">' + meta + '</div>' +
-    '<p class="prompt-text">' + escapeHtml(info.promptText || '') + '</p>' + finalBlock;
+    '<p class="prompt-text">' + escapeHtml(info.promptText || '') + '</p>' + renderInputs(info.inputs) + finalBlock;
   promptDetailsEl.classList.remove('hidden');
   const copyBtn = document.getElementById('copy-final-prompt');
   if (copyBtn) {
@@ -170,6 +194,7 @@ async function showPromptDetails(entry) {
     aspectRatio: entry.aspectRatio,
     duration: entry.duration,
     createdAt: entry.createdAt,
+    inputs: entry.inputs,
   });
   if (entry.finalPrompt || entry.expandedPrompt) return;
   try {

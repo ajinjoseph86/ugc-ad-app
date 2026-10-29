@@ -407,6 +407,7 @@ app.get('/api/history/:id', async (req, res) => {
     aspectRatio: e.aspectRatio,
     promptText: e.prompt,
     finalPrompt: e.expandedPrompt,
+    inputs: e.inputs,
   });
 });
 
@@ -429,6 +430,18 @@ async function updateHistoryEntry(id, patch) {
 
 // Runs after the HTTP response has already been sent — kie.ai's Seedance generation averages
 // several minutes, far longer than Render's reverse-proxy request timeout would allow.
+// Small preview copies of the photos used for a generation, kept alongside the video so the gallery
+// can show what went in. The full-size staged uploads are still deleted after generation.
+async function saveInputThumb(buffer) {
+  const name = 'in-' + uuidv4() + '.jpg';
+  await sharp(buffer)
+    .rotate()
+    .resize({ width: 480, height: 480, fit: 'inside', withoutEnlargement: true })
+    .jpeg({ quality: 72 })
+    .toFile(path.join(GENERATED_DIR, name));
+  return '/generated/' + name;
+}
+
 async function processGeneration({
   id,
   scenePrompt,
@@ -589,11 +602,15 @@ app.post(
         return `${origin}/uploads/${fileName}`;
       }
 
+      const characterThumbs = [];
+      const productThumbs = [];
       for (const characterFile of characterFiles) {
         referenceImageUrls.push(await stageUpload(characterFile));
+        characterThumbs.push(await saveInputThumb(characterFile.buffer));
       }
       for (const productFile of productFiles) {
         referenceImageUrls.push(await stageUpload(productFile));
+        productThumbs.push(await saveInputThumb(productFile.buffer));
       }
 
       const id = uuidv4();
@@ -604,6 +621,7 @@ app.post(
         prompt,
         aspectRatio,
         duration,
+        inputs: { characterMode, characterDescription, characterThumbs, productMode, productDescription, productThumbs },
         status: 'pending',
         stage: 'starting',
         costUsd: estimatedCost,
